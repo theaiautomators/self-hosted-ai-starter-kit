@@ -54,7 +54,7 @@ x-init-ollama: &init-ollama
 # Docling Base Configuration (YAML Anchor)
 # ===========================================
 x-docling: &service-docling
-  image: ghcr.io/docling-project/docling-serve:main
+  image: ghcr.io/docling-project/docling-serve:latest
   container_name: docling
   networks: ['demo']
   restart: unless-stopped
@@ -76,6 +76,7 @@ x-docling: &service-docling
     - GRADIO_ALLOWED_PATHS=/shared
     - GRADIO_TEMP_DIR=/shared/docling-scratch
     - DOCLING_SERVE_ENABLE_REMOTE_SERVICES=true
+    - UVICORN_WORKERS=1
   volumes:
     - docling_data:/data
     - ./shared:/shared
@@ -243,7 +244,7 @@ services:
   docling-gpu:
     profiles: ["gpu-nvidia"]
     <<: *service-docling
-    image: ghcr.io/docling-project/docling-serve-cu126:main
+    image: ghcr.io/docling-project/docling-serve-cu128:latest
     environment:
       - DOCLING_SERVE_ENABLE_UI=true
       - DOCLING_SERVE_SCRATCH_PATH=/shared/docling-scratch
@@ -252,6 +253,7 @@ services:
       - GRADIO_TEMP_DIR=/shared/docling-scratch
       - NVIDIA_VISIBLE_DEVICES=all
       - DOCLING_SERVE_ENABLE_REMOTE_SERVICES=true
+      - UVICORN_WORKERS=1
     runtime: nvidia
 
   docling-gpu-amd:
@@ -266,6 +268,7 @@ services:
       - GRADIO_TEMP_DIR=/shared/docling-scratch
       - ROCR_VISIBLE_DEVICES=0
       - DOCLING_SERVE_ENABLE_REMOTE_SERVICES=true
+      - UVICORN_WORKERS=1
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
