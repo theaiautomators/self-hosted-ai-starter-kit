@@ -1,0 +1,521 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "folder",
+        "path": "/data/shared/rag-files/pending/",
+        "events": [
+          "add"
+        ],
+        "options": {
+          "usePolling": true
+        }
+      },
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "50231358-f20d-42ac-a16d-cdafbfe92ac2",
+      "name": "Local File Trigger"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.path }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "af9847e1-1e19-454f-8a5d-2178df6083ef",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docling:5001/v1/convert/file",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "files",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "image_export_mode",
+              "value": "referenced"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "3f29db6f-b137-48e1-be9a-330fe45e448b",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract image file names from markdown content in each input item\nfor (const item of $input.all()) {\n  const md = item.json?.document?.md_content ?? \"\";\n\n  // Matches: ![Image](some_file_name.png)\n  const matches = [...md.matchAll(/!\\[[^\\]]*]\\(([^)\\s]+)\\)/g)];\n  const imageNames = matches.map((m) => m[1]);\n\n  // Add new field to each item\n  item.json.imageNames = imageNames;\n  item.json.imageCount = imageNames.length;\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        176
+      ],
+      "id": "1fe28bf9-89c2-4a8a-a5f4-6221fa50ba57",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "imageNames",
+        "include": "=",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        864,
+        176
+      ],
+      "id": "6011cc8c-c01b-47c3-834e-0b3b9b9fda1f",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=find /data/shared/ -name \"{{ $json.imageNames }}\" -exec cp {} /data/shared/extracted-images/ \\;"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        176
+      ],
+      "id": "194e4bce-1513-454e-a1bb-13d3d597999b",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "testpart3",
+          "mode": "list",
+          "cachedResultName": "testpart3"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        1024,
+        -352
+      ],
+      "id": "c0405fa4-b3c7-4fe7-b2e5-b5bd0a869b6b",
+      "name": "Qdrant Vector Store",
+      "credentials": {
+        "qdrantApi": {
+          "id": "sFfERYppMeBnFNeA",
+          "name": "Local QdrantApi database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        -160
+      ],
+      "id": "64b8e03e-c999-4d82-b42d-7164ad1c2193",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "xHuYe0MDGOs9IpBW",
+          "name": "Local Ollama service"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are a helpful and direct AI assistant. Your job is to use the Qdrant_Vector_Store1 tool to answer the user's questions.\n\nCRITICAL RULE:\nIf the tool returns text that contains Markdown image links (for example: ![Image](http://localhost:8080/...)), you MUST include those exact links in your final answer so the user can see the pictures. Answer directly and naturally.\n\nIf the provided context contains a Markdown image link, you MUST copy and paste that exact line of Markdown into your response without altering a single character."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        192,
+        368
+      ],
+      "id": "0ded7123-8c86-4f90-8c40-86c9630bf8e4",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -48,
+        368
+      ],
+      "id": "e4c95552-b213-4f52-99f9-fc217ddfba09",
+      "name": "When chat message received",
+      "webhookId": "ca118fce-337c-4bf1-a50d-d753b5804c1e"
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Use this to fetch information from the knowledge base",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "testpart3",
+          "mode": "list",
+          "cachedResultName": "testpart3"
+        },
+        "topK": 5,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        416,
+        656
+      ],
+      "id": "05a0150b-3f91-4093-bbed-cce3cad046a7",
+      "name": "Qdrant Vector Store1",
+      "credentials": {
+        "qdrantApi": {
+          "id": "sFfERYppMeBnFNeA",
+          "name": "Local QdrantApi database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        416,
+        800
+      ],
+      "id": "ecd427e0-7677-4709-b961-fedf8ebd5189",
+      "name": "Embeddings Ollama1",
+      "credentials": {
+        "ollamaApi": {
+          "id": "xHuYe0MDGOs9IpBW",
+          "name": "Local Ollama service"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Base where images are served (no trailing slash required)\nconst BASE_URL = 'http://192.168.0.16:8080';\n\n// Leave empty because Nginx serves the extracted-images folder directly at the root\nconst IMAGE_PATH_PREFIX = '';\n\nfunction buildImageUrl(relativeSrc) {\n  const file = String(relativeSrc).trim().replace(/^\\.\\//, '');\n  const base = BASE_URL.replace(/\\/+$/, '');\n  const prefix = IMAGE_PATH_PREFIX.replace(/^\\/+|\\/+$/g, '');\n  const path = prefix ? `${prefix}/${file}` : file;\n  return `${base}/${path.replace(/\\/+/g, '/')}`;\n}\n\nfor (const item of $input.all()) {\n  // FIX 1: Drill down into Docling's 'document' object to find the markdown\n  const md = item.json?.document?.md_content;\n  \n  if (typeof md !== 'string') continue;\n\n  // FIX 2: Write the updated markdown back to that exact nested path\n  item.json.document.md_content = md.replace(\n    /!\\[([^\\]]*)\\]\\(([^)]+)\\)/g,\n    (full, alt, src) => {\n      const s = src.trim();\n      if (/^https?:\\/\\//i.test(s) || s.startsWith('data:') || s.startsWith('//')) {\n        return full;\n      }\n      return `![${alt}](${buildImageUrl(s)})`;\n    }\n  );\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        -352
+      ],
+      "id": "d915fab1-5ebc-4e79-b218-6ddd5488e366",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gemma4:e4b",
+          "mode": "list",
+          "cachedResultName": "gemma4:e4b"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        192,
+        608
+      ],
+      "id": "2d3e9c4a-f6b5-4181-912c-aabdf7733724",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "6aekPMNXFLDx6BTJ",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chunkSize": 2000,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        0
+      ],
+      "id": "9e2d7271-6b0a-432e-95f6-949484497b49",
+      "name": "Recursive Character Text Splitter"
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "fileName",
+                "value": "={{ $json.files }}"
+              },
+              {
+                "name": "uploadedAt",
+                "value": "={{ $json.submittedAt }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "e594d172-f3c8-4731-aa58-a76e7aa2d92e",
+      "name": "Document Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1168,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9538c0cd-7661-40d5-86d3-03792a6dde23",
+              "name": "text",
+              "value": "={{ $json.document.md_content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        832,
+        -352
+      ],
+      "id": "5ad8eee5-a8c6-43e7-83d3-a7f389d493f1",
+      "name": "Edit Fields"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Local File Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        []
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Vector Store1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Document Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f8e63be3-b6da-4aca-8338-59fffc21dc60",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "G6K5unDJ093vcTNA",
+  "tags": []
+}
